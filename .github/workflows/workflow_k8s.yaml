@@ -1,0 +1,56 @@
+name: Build, Test, and Deploy to Kubernetes with Minikube
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set up Minikube
+      run: |
+        # Instalar Minikube
+        sudo apt-get update
+        sudo apt-get install -y curl apt-transport-https
+        curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+        sudo install minikube-linux-amd64 /usr/local/bin/minikube
+
+        # Iniciar Minikube com driver Docker
+        minikube start --driver=docker
+
+    - name: Set Docker Env to Minikube
+      run: |
+        eval $(minikube docker-env)
+
+    - name: Build Docker Image for Minikube
+      run: |
+        docker build -t my-go-gin-app:1.0 .
+
+    - name: Apply Kubernetes Manifests
+      run: |
+        kubectl apply -f deployment.yml
+        kubectl apply -f service.yml
+
+    - name: Expose Minikube Service
+      run: |
+        minikube service app --url
+
+    - name: Verify Service is Running
+      run: |
+        MINIKUBE_IP=$(minikube ip)
+        echo "Minikube IP: $MINIKUBE_IP"
+        PORT=$(kubectl get svc app -o jsonpath='{.spec.ports[0].nodePort}')
+        echo "NodePort: $PORT"
+        curl --fail http://$MINIKUBE_IP:$PORT || exit 1
